@@ -180,12 +180,3 @@ print('主题字体残留:', re.findall(r'w:(?:ascii|hAnsi|eastAsia|cs)Theme="[^
 | 新增小节类型 | `SECTIONS` 元组 |
 | 各级标题字号 | `build()` 里 `set_fonts(doc.styles['Heading 1'], size=16)` 等三行 |
 | 正文默认字号 | `build()` 里 `set_fonts(doc.styles['Normal'], size=10.5)` |
-
-## 已处理的文件
-
-| 源文件 | 输出 | 版本数 | 删除的测试建议 |
-|---|---|---|---|
-| `sp1` | `sp1.docx` | 25 | 0 行（源文件本就没有） |
-| `sp2.txt` | `sp2.docx` | 23 | 145 行 |
-| `sp3-2303.txt` | `sp3-2303.docx` | 28 | 222 行 |
-| `SP3-2403.txt` | `SP3-2403.docx` | 30 | 221 行 |
