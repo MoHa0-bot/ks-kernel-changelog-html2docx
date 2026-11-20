@@ -65,6 +65,10 @@ CVE_RE = re.compile(r'CVE-\d{4}-\d+(?:\s+(?:\[[^\]]*\]|task#\S+|bug#\S+))*')
 # 偶尔混进来的 markdown 标题前缀，如 "### CVE修复 - CVE-xxx"
 MD_HEAD_RE = re.compile(r'^#{1,6}\s*')
 
+# 网页另存为常见的导航/装饰文本，提取标题时应直接跳过（不当作标题或正文）
+NAV_LINES = ('返回首页', '返回顶部', '回到顶部', '上一篇', '下一篇', '首页',
+             '打印', '打印本页', '收藏', '分享', '上一页', '下一页')
+
 THEME_ATTRS = ('asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme')
 
 # 会被整体丢弃的标签（脚本、样式、注释等），不产生任何文本
@@ -264,13 +268,16 @@ def build(src, dst, skip=(), title=None):
 
     stats = {'ver': 0, 'sec': 0, 'para': 0, 'skipped': 0}
 
-    # 首行若不是版本号/小节名，视为文档标题
+    # 提取标题：跳过开头的导航/装饰行与空行，把第一行有实际内容的
+    # 非版本号/非小节名文本当作标题
     body = []
     for raw in lines:
         s = raw.strip()
         if not s:
             continue
         if not body and not VERSION_RE.match(s) and match_section(s) is None:
+            if s in NAV_LINES:
+                continue          # "返回首页" 之类的导航文本直接丢弃
             if title is None:
                 title = s
             continue
