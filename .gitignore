@@ -10,6 +10,9 @@
 # 本地临时目录
 .tmp/
 
+# Release 文案草稿（本地辅助文件，不提交）
+.release_*.md
+
 # Python
 __pycache__/
 *.py[cod]
