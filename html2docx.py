@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""把纯文本内核发布日志整理成 docx。
+"""把内核发布日志整理成 docx。支持纯文本(.txt)与网页(.html/.htm)两种输入。
 
 用法：
-    python3 txt2docx.py 输入.txt 输出.docx [--skip 测试建议] [--title 标题]
+    python3 html2docx.py 输入.html 输出.docx [--skip 测试建议] [--title 标题]
+    python3 html2docx.py 输入.txt  输出.docx [--skip 测试建议] [--title 标题]
 
 结构：版本 = 一级标题，小节 = 二级标题（特性增强/特性更改/问题修复/CVE修复/配置参数变更）。
 字体：中文宋体，英文数字 Times New Roman。
@@ -14,6 +15,8 @@ import re
 import shutil
 import tempfile
 import zipfile
+from html.parser import HTMLParser
+from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -63,6 +66,109 @@ CVE_RE = re.compile(r'CVE-\d{4}-\d+(?:\s+(?:\[[^\]]*\]|task#\S+|bug#\S+))*')
 MD_HEAD_RE = re.compile(r'^#{1,6}\s*')
 
 THEME_ATTRS = ('asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme')
+
+# 会被整体丢弃的标签（脚本、样式、注释等），不产生任何文本
+SKIP_TAGS = {'script', 'style', 'noscript', 'template', 'head', 'title'}
+# 块级标签：进入/退出时都会起一行，保证标题、段落、表格等不粘连
+BLOCK_TAGS = {'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'tr',
+              'br', 'pre', 'blockquote', 'section', 'article', 'header',
+              'footer', 'table', 'ul', 'ol', 'dl', 'dt', 'dd', 'hr'}
+
+
+class _HtmlToText(HTMLParser):
+    """把 HTML 转成纯文本行，结构尽量贴近原 txt：标题、段落、表格各占一行。"""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._lines = []        # 已落定的行
+        self._buf = []          # 当前行累积的文本片段
+        self._pre = 0           # <pre> 深度，内部保留空白与换行
+        self._skip = 0          # 丢弃区深度（script/style 等）
+
+    def _flush(self):
+        line = ''.join(self._buf).strip()
+        if line:
+            self._lines.append(line)
+        self._buf = []
+
+    def _newline(self):
+        # pre 内部换行单独成行（原样保留空白）
+        if self._pre:
+            self._flush()
+        else:
+            self._flush()
+
+    def _cell_gap(self):
+        # 相邻单元格之间补一个空格，避免内容粘连
+        if self._buf and not self._pre:
+            self._buf.append(' ')
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in SKIP_TAGS:
+            self._skip += 1
+            return
+        if self._skip:
+            return
+        if tag == 'pre':
+            self._pre += 1
+            self._flush()
+            return
+        if tag in ('td', 'th'):
+            self._cell_gap()
+            return
+        if tag in BLOCK_TAGS:
+            self._flush()
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in SKIP_TAGS:
+            if self._skip:
+                self._skip -= 1
+            return
+        if self._skip:
+            return
+        if tag == 'pre':
+            if self._pre:
+                self._pre -= 1
+            self._flush()
+            return
+        if tag in BLOCK_TAGS:
+            self._flush()
+
+    def handle_data(self, data):
+        if self._skip:
+            return
+        if self._pre:
+            # pre 内的换行拆成多行；纯空白行会被 flush 时的 strip 清掉
+            parts = data.split('\n')
+            for i, part in enumerate(parts):
+                if i:
+                    self._flush()
+                self._buf.append(part)
+            return
+        # 普通文本压缩连续空白，避免 HTML 里的缩进/换行把段落打散
+        self._buf.append(re.sub(r'\s+', ' ', data))
+    def text(self):
+        self._flush()
+        return self._lines
+
+
+def html_to_text(data):
+    """把 HTML 文档转成纯文本行列表。"""
+    parser = _HtmlToText()
+    parser.feed(data)
+    parser.close()
+    return parser.text()
+
+
+def read_source(src):
+    """读入源文件：html/htm 转文本，txt 直接按行读。"""
+    p = Path(src)
+    data = p.read_text(encoding='utf-8')
+    if p.suffix.lower() in ('.html', '.htm'):
+        return html_to_text(data)
+    return data.splitlines()
 
 
 def set_fonts(style, size=None, bold=None, color=None):
@@ -142,8 +248,7 @@ def split_cve_line(line):
 
 
 def build(src, dst, skip=(), title=None):
-    with open(src, encoding='utf-8') as f:
-        lines = f.read().splitlines()
+    lines = read_source(src)
 
     doc = Document()
 
@@ -229,7 +334,8 @@ def build(src, dst, skip=(), title=None):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description='把内核发布日志整理成 docx，支持 .txt / .html / .htm 输入。')
     ap.add_argument('src')
     ap.add_argument('dst')
     ap.add_argument('--skip', action='append', default=None,

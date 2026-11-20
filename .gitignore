@@ -3,7 +3,12 @@
 
 # 输入源文件（内核日志原文）
 *.txt
+*.html
+*.htm
 !requirements.txt
+
+# 本地临时目录
+.tmp/
 
 # Python
 __pycache__/

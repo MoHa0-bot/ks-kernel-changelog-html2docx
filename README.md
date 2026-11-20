@@ -1,17 +1,21 @@
-# ks-kernel-changelog-txt2docx
+# ks-kernel-changelog-html2docx
 
-把纯文本格式的内核发布日志整理成排版好的 Word 文档。
+把内核发布日志整理成排版好的 Word 文档。支持 **网页（.html / .htm）** 与 **纯文本（.txt）** 两种输入。
+
+网页"另存为"得到的 HTML 文件可直接转换，无需再手动全选粘贴成 txt。
 
 | 文件 | 说明 |
 |---|---|
-| `txt2docx.py` | 转换脚本 |
+| `html2docx.py` | 转换脚本 |
 | `README.md` | 本文档 |
 | `LICENSE` | MIT 许可证 |
 
 ## 依赖
 
-- `python3`
+- `python3`（3.6+）
 - `python-docx`
+
+HTML 解析用的是 Python 标准库 `html.parser`，**不额外引入第三方依赖**。
 
 安装依赖：
 
@@ -28,41 +32,57 @@ python3 -c "import docx; print('python-docx OK')"
 ## 快速开始
 
 ```bash
-python3 txt2docx.py <输入.txt> <输出.docx>
+# 网页输入（.html / .htm）
+python3 html2docx.py <输入.html> <输出.docx>
+
+# 纯文本输入（.txt）
+python3 html2docx.py <输入.txt> <输出.docx>
 ```
 
 例：
 
 ```bash
-python3 txt2docx.py SP3-2403.txt SP3-2403.docx
+python3 html2docx.py SP3-2403.html SP3-2403.docx
+python3 html2docx.py SP3-2403.txt  SP3-2403.docx
 ```
 
 ## 参数
 
 | 参数 | 说明 |
 |---|---|
-| `src` | 源文本文件路径（位置参数，必填） |
+| `src` | 源文件路径（位置参数，必填），支持 `.html` / `.htm` / `.txt` |
 | `dst` | 输出 docx 路径（位置参数，必填） |
 | `--skip <小节名>` | 整段删除该小节，可重复指定。默认值就是 `测试建议`，即不写也会删掉「测试建议」 |
 | `--title <标题>` | 指定文档标题。不写则自动取源文件首行；若首行是版本号，用默认标题「内核更新日志」 |
 
 ```bash
 # 查看帮助
-python3 txt2docx.py --help
+python3 html2docx.py --help
 
 # 指定标题
-python3 txt2docx.py in.txt out.docx --title "V10SP4 内核发布日志"
+python3 html2docx.py in.html out.docx --title "V10SP4 内核发布日志"
 
 # 额外再删一个小节
-python3 txt2docx.py in.txt out.docx --skip 测试建议 --skip 已知问题
+python3 html2docx.py in.html out.docx --skip 测试建议 --skip 已知问题
 ```
+
+## HTML 输入说明
+
+脚本用标准库把 HTML 转成纯文本行，再走与 txt 完全相同的解析流程。转换规则：
+
+- `<h1>`～`<h6>`、`<p>`、`<div>`、`<li>`、`<tr>`、`<pre>`、`<br>` 等块级元素各自起一行
+- `<table>` 的每个单元格 `<td>`/`<th>` 之间补空格分隔，单元格内容不会粘连
+- `<pre>` 内的换行原样保留、逐行拆分（适合放纯文本日志正文）
+- `<script>`、`<style>`、`<head>`、`<title>`、`<noscript>` 等整体丢弃，不产生正文
+- 普通文本的连续空白（HTML 里的缩进、折行）会压缩成单个空格，不会打散段落
+
+因此，只要网页正文里保留了版本号标题（`2026-9-23 [Version ...]`）与小节名（特性增强 / 问题修复 / CVE修复 等），就能得到和 txt 输入一致的排版结果。
 
 ## 批量处理同系列文件
 
 ```bash
-for pair in "sp1:sp1" "sp2.txt:sp2" "sp3-2303.txt:sp3-2303" "SP3-2403.txt:SP3-2403"; do
-  src="${pair%%:*}"; out="${pair##*:}"
-  python3 txt2docx.py "$src" "$out.docx"
+for name in sp1 sp2 sp3-2303 SP3-2403; do
+  python3 html2docx.py "$name.html" "$name.docx"
 done
 ```
 
@@ -138,7 +158,7 @@ from collections import Counter
 from docx import Document
 from docx.oxml.ns import qn
 
-SRC, DST = 'SP3-2403.txt', 'SP3-2403.docx'
+SRC, DST = 'SP3-2403.html', 'SP3-2403.docx'
 
 src = open(SRC, encoding='utf-8').read()
 d = Document(DST)
